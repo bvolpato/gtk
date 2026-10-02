@@ -164,6 +164,10 @@ typedef enum {
    * only be used as a mask.
    */
   GSK_GPU_AS_IMAGE_MASK = (1 << 2),
+  /* The returned image needs to have mipmaps rendered, because the
+   * code using this image will sample mipmap layers.
+   */
+  GSK_GPU_AS_IMAGE_MIPMAP = (1 << 3),
 } GskGpuAsImageFlags;
 
 static void             gsk_gpu_node_processor_add_node_untracked       (GskGpuRenderPass            *self,
@@ -396,6 +400,7 @@ gsk_gpu_node_processor_create_offscreen (GskGpuFrame           *frame,
                                          GdkColorState         *ccs,
                                          const graphene_size_t *scale,
                                          const graphene_rect_t *viewport,
+                                         gboolean               with_mipmap,
                                          GskRenderNode         *node)
 {
   GskGpuImage *image;
@@ -411,7 +416,7 @@ gsk_gpu_node_processor_create_offscreen (GskGpuFrame           *frame,
                                   gsk_render_node_get_preferred_depth (node));
 
   image = create_offscreen_image (frame,
-                                  FALSE,
+                                  with_mipmap,
                                   gdk_memory_depth_get_format (depth),
                                   FALSE,
                                   area.width, area.height);
@@ -452,6 +457,7 @@ gsk_gpu_get_node_as_image_via_offscreen (GskGpuFrame           *frame,
                                          GskGpuSampler         *out_sampler)
 {
   GskGpuImage *result;
+  gboolean mipmap;
 
   GSK_DEBUG (FALLBACK, "Offscreening node '%s'", g_type_name_from_instance ((GTypeInstance *) node));
 
@@ -485,11 +491,17 @@ gsk_gpu_get_node_as_image_via_offscreen (GskGpuFrame           *frame,
       *out_sampler = GSK_GPU_SAMPLER_DEFAULT;
     }
 
+  mipmap = flags & GSK_GPU_AS_IMAGE_MIPMAP ? TRUE : FALSE;
+
   result = gsk_gpu_node_processor_create_offscreen (frame,
                                                     ccs,
                                                     scale,
                                                     out_bounds,
+                                                    mipmap,
                                                     node);
+
+  if (mipmap)
+    gsk_gpu_mipmap_op (frame, result);
 
   return result;
 }
@@ -815,6 +827,7 @@ gsk_gpu_node_processor_add_cairo_node (GskGpuRenderPass *self,
   image = gsk_gpu_upload_cairo_op (self->frame,
                                    &self->scale,
                                    &clipped_bounds,
+                                   FALSE,
                                    (GskGpuCairoFunc) gsk_render_node_draw_fallback,
                                    gsk_render_node_ref (node),
                                    (GDestroyNotify) gsk_render_node_unref);
@@ -1579,7 +1592,8 @@ gsk_gpu_get_texture_node_as_image (GskGpuFrame           *frame,
       !gsk_rect_equal (clip_bounds, &bounds))
     return gsk_gpu_get_node_as_image_via_offscreen (frame, flags, ccs, clip_bounds, scale, node, out_bounds, out_sampler);
 
-  should_mipmap = texture_node_should_mipmap (node, frame, scale);
+  should_mipmap = texture_node_should_mipmap (node, frame, scale) ||
+                  (flags & GSK_GPU_AS_IMAGE_MIPMAP);
   image = gsk_gpu_lookup_texture (frame, ccs, texture, FALSE, &image_cs);
 
   in_bounds = gsk_rect_contains_rect (&bounds, clip_bounds);
@@ -1722,6 +1736,7 @@ gsk_gpu_node_processor_add_texture_scale_node (GskGpuRenderPass *self,
                                                                self->ccs,
                                                                &GRAPHENE_SIZE_INIT (1, 1),
                                                                &clip_bounds,
+                                                               FALSE,
                                                                node);
           gdk_color_state_unref (image_cs);
           g_object_unref (image);
@@ -1790,18 +1805,25 @@ gsk_gpu_get_cairo_node_as_image (GskGpuFrame           *frame,
                                  GskGpuSampler         *out_sampler)
 {
   GskGpuImage *result;
+  gboolean mipmap;
 
   if (!gdk_color_state_equal (ccs, GDK_COLOR_STATE_SRGB))
     return gsk_gpu_get_node_as_image_via_offscreen (frame, flags, ccs, clip_bounds, scale, node, out_bounds, out_sampler);
 
+  mipmap = flags & GSK_GPU_AS_IMAGE_MIPMAP ? TRUE : FALSE;
+
   result = gsk_gpu_upload_cairo_op (frame,
                                     scale,
                                     clip_bounds,
+                                    mipmap,
                                     (GskGpuCairoFunc) gsk_render_node_draw_fallback,
                                     gsk_render_node_ref (node),
                                     (GDestroyNotify) gsk_render_node_unref);
 
   g_object_ref (result);
+
+  if (mipmap)
+    gsk_gpu_mipmap_op (frame, result);
 
   *out_bounds = *clip_bounds;
   *out_sampler = GSK_GPU_SAMPLER_DEFAULT;
