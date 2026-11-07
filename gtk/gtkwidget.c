@@ -51,6 +51,7 @@
 #include "gtkrenderbackgroundprivate.h"
 #include "gtkrenderborderprivate.h"
 #include "gtkrootprivate.h"
+#include "gtkaccessiblechildindexprivate.h"
 #include "gtknativeprivate.h"
 #include "gtkscrollable.h"
 #include "gtksettingsprivate.h"
@@ -913,6 +914,8 @@ gtk_widget_set_accessible_role (GtkWidget         *self,
 
       if (priv->at_context != NULL)
         gtk_at_context_set_accessible_role (priv->at_context, role);
+
+      _gtk_widget_update_accessible_child_index (self);
 
       g_object_notify_by_pspec (G_OBJECT (self), widget_props[PROP_ACCESSIBLE_ROLE]);
     }
@@ -2749,6 +2752,7 @@ gtk_widget_unparent (GtkWidget *widget)
         priv->next_sibling->priv->prev_sibling = priv->prev_sibling;
     }
   old_prev_sibling = priv->prev_sibling;
+  _gtk_widget_accessible_child_index_remove (old_parent, widget);
   priv->parent = NULL;
   priv->prev_sibling = NULL;
   priv->next_sibling = NULL;
@@ -2877,6 +2881,7 @@ gtk_widget_real_show (GtkWidget *widget)
   g_return_if_fail (!_gtk_widget_get_visible (widget));
 
   priv->visible = TRUE;
+  _gtk_widget_update_accessible_child_index (widget);
 
   if (priv->parent &&
       _gtk_widget_get_mapped (priv->parent) &&
@@ -2946,6 +2951,7 @@ gtk_widget_real_hide (GtkWidget *widget)
   g_return_if_fail (_gtk_widget_get_visible (widget));
 
   priv->visible = FALSE;
+  _gtk_widget_update_accessible_child_index (widget);
 
   if (_gtk_widget_get_mapped (widget))
     gtk_widget_unmap (widget);
@@ -6070,6 +6076,7 @@ _gtk_widget_set_visible_flag (GtkWidget *widget,
   GtkWidgetPrivate *priv = gtk_widget_get_instance_private (widget);
 
   priv->visible = visible;
+  _gtk_widget_update_accessible_child_index (widget);
 
   if (!visible)
     {
@@ -6397,6 +6404,8 @@ gtk_widget_reposition_after (GtkWidget *widget,
       if (parent->priv->last_child == NULL)
         parent->priv->last_child = widget;
     }
+
+  _gtk_widget_accessible_child_index_reposition (parent, widget, previous_sibling);
 
   parent_flags = _gtk_widget_get_state_flags (parent);
 
@@ -7771,6 +7780,8 @@ gtk_widget_dispose (GObject *object)
       gtk_widget_real_destroy (widget);
     }
 
+  _gtk_widget_clear_accessible_child_index (widget);
+
   sizegroups = _gtk_widget_get_sizegroups (widget);
   while (sizegroups)
     {
@@ -8882,7 +8893,7 @@ gtk_widget_accessible_get_platform_state (GtkAccessible              *self,
     }
 }
 
-static GtkAccessible *
+GtkAccessible *
 gtk_widget_accessible_get_accessible_parent (GtkAccessible *self)
 {
   GtkWidget *parent = _gtk_widget_get_parent (GTK_WIDGET (self));
@@ -8893,7 +8904,7 @@ gtk_widget_accessible_get_accessible_parent (GtkAccessible *self)
   return GTK_ACCESSIBLE (g_object_ref (parent));
 }
 
-static GtkAccessible *
+GtkAccessible *
 gtk_widget_accessible_get_next_accessible_sibling (GtkAccessible *self)
 {
   GtkWidget *sibling = _gtk_widget_get_next_sibling (GTK_WIDGET (self));
@@ -8904,7 +8915,7 @@ gtk_widget_accessible_get_next_accessible_sibling (GtkAccessible *self)
   return GTK_ACCESSIBLE (g_object_ref (sibling));
 }
 
-static GtkAccessible *
+GtkAccessible *
 gtk_widget_accessible_get_first_accessible_child (GtkAccessible *self)
 {
   GtkWidget *child = _gtk_widget_get_first_child (GTK_WIDGET (self));

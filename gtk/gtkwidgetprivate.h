@@ -200,6 +200,12 @@ struct _GtkWidgetPrivate
   GtkWidget *first_child;
   GtkWidget *last_child;
 
+  /* a11y child indexing */
+  gpointer accessible_child_index;
+  guint accessible_child_index_version;
+  guint accessible_child_index_busy : 1;
+  guint accessible_child_index_disabled : 1;
+
   /* only created on-demand */
   GtkListListModel *children_observer;
   GtkListListModel *controller_observer;
