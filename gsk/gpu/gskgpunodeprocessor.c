@@ -2597,16 +2597,18 @@ gsk_gpu_node_processor_add_shadow_node (GskGpuRenderPass *self,
       else
         {
           graphene_size_t sigma = GRAPHENE_SIZE_INIT (shadow->radius, shadow->radius);
-          graphene_rect_t padded_bounds;
+          graphene_rect_t padded_bounds, padded_padded_bounds;
           graphene_size_t padding;
 
           gsk_blur_node_get_padding (&sigma, &padding);
           graphene_rect_inset_r (&bounds, - padding.width, - padding.height, &padded_bounds);
-          if (!gsk_rect_snap_to_grid_grow (&padded_bounds, &self->scale, &self->offset, &padded_bounds))
+          graphene_rect_inset_r (&padded_bounds, - padding.width, - padding.height, &padded_padded_bounds);
+          if (!gsk_rect_snap_to_grid_grow (&padded_bounds, &self->scale, &self->offset, &padded_bounds) ||
+              !gsk_rect_snap_to_grid_grow (&padded_padded_bounds, &self->scale, &self->offset, &padded_padded_bounds))
             continue;
           gsk_gpu_node_processor_blur_op (self,
-                                          &bounds,
                                           &padded_bounds,
+                                          &padded_padded_bounds,
                                           &sigma,
                                           &shadow->color,
                                           image,
