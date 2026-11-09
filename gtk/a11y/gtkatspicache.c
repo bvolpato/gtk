@@ -182,17 +182,17 @@ static void
 collect_cached_objects (GtkAtSpiCache   *self,
                         GVariantBuilder *builder)
 {
-  GHashTable *collection = g_hash_table_new (NULL, NULL);
+  GHashTable *collection = g_hash_table_new_full (NULL, NULL, g_object_unref, NULL);
   GHashTableIter iter;
   gpointer key_p, value_p;
 
   /* Serializing the contexts might re-enter, and end up modifying the hash
-   * table, so we take a snapshot here and return the items we have at the
-   * moment of the GetItems() call
+   * table, so we take a snapshot here and hold references to its contexts.
+   * Contexts removed before serialization are skipped.
    */
   g_hash_table_iter_init (&iter, self->contexts_by_path);
   while (g_hash_table_iter_next (&iter, &key_p, &value_p))
-    g_hash_table_add (collection, value_p);
+    g_hash_table_add (collection, g_object_ref (value_p));
 
   g_variant_builder_open (builder, G_VARIANT_TYPE ("(" ITEM_SIGNATURE ")"));
   collect_root (self, builder);
@@ -201,10 +201,12 @@ collect_cached_objects (GtkAtSpiCache   *self,
   g_hash_table_iter_init (&iter, collection);
   while (g_hash_table_iter_next (&iter, &key_p, &value_p))
     {
-      g_variant_builder_open (builder, G_VARIANT_TYPE ("(" ITEM_SIGNATURE ")"));
-
       GtkAtSpiContext *context = value_p;
 
+      if (!g_hash_table_contains (self->contexts_to_path, context))
+        continue;
+
+      g_variant_builder_open (builder, G_VARIANT_TYPE ("(" ITEM_SIGNATURE ")"));
       collect_object (self, builder, context);
 
       g_variant_builder_close (builder);
