@@ -76,7 +76,9 @@ gdk_event_apply_filters (XEvent    *xevent,
         }
 
       filter->ref_count++;
+      filter->in_use++;
       result = filter->function (xevent, event, filter->data);
+      filter->in_use--;
 
       /* Protect against unreffing the filter mutating the list */
       node = tmp_list->next;

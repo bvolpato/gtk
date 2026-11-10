@@ -190,7 +190,9 @@ gdk_event_apply_filters (NSEvent *nsevent,
         }
 
       filter->ref_count++;
+      filter->in_use++;
       result = filter->function (nsevent, event, filter->data);
+      filter->in_use--;
 
       /* get the next node after running the function since the
          function may add or remove a next node */

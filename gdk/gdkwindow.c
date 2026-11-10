@@ -1959,8 +1959,20 @@ _gdk_event_filter_unref (GdkWindow       *window,
 static void
 window_remove_filters (GdkWindow *window)
 {
-  while (window->filters)
-    _gdk_event_filter_unref (window, window->filters->data);
+  GList *tmp_list = window->filters;
+
+  while (tmp_list)
+    {
+      GdkEventFilter *filter = tmp_list->data;
+      guint n_refs = filter->ref_count - filter->in_use;
+
+      tmp_list = tmp_list->next;
+      filter->flags |= GDK_EVENT_FILTER_REMOVED;
+
+      /* Keep references held by callbacks until they return. */
+      while (n_refs-- > 0)
+        _gdk_event_filter_unref (window, filter);
+    }
 }
 
 static void
@@ -2674,6 +2686,7 @@ gdk_window_add_filter (GdkWindow     *window,
   filter->function = function;
   filter->data = data;
   filter->ref_count = 1;
+  filter->in_use = 0;
   filter->flags = 0;
 
   if (window)
@@ -2714,7 +2727,8 @@ gdk_window_remove_filter (GdkWindow     *window,
         {
           filter->flags |= GDK_EVENT_FILTER_REMOVED;
 
-          _gdk_event_filter_unref (window, filter);
+          if (filter->ref_count > filter->in_use)
+            _gdk_event_filter_unref (window, filter);
 
           return;
         }

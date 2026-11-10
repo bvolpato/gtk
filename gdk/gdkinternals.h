@@ -63,6 +63,7 @@ struct _GdkEventFilter {
   gpointer data;
   GdkEventFilterFlags flags;
   guint ref_count;
+  guint in_use;
 };
 
 struct _GdkClientFilter {

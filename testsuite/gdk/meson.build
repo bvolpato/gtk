@@ -3,6 +3,7 @@ tests = [
   'display',
   'encoding',
   'keysyms',
+  'lifetime',
   'rectangle',
   'rgba',
   'seat',

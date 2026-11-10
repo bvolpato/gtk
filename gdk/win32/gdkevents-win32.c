@@ -1126,7 +1126,9 @@ apply_event_filters (GdkWindow  *window,
         }
 
       filter->ref_count++;
+      filter->in_use++;
       result = filter->function (msg, event, filter->data);
+      filter->in_use--;
 
       /* get the next node after running the function since the
          function may add or remove a next node */
